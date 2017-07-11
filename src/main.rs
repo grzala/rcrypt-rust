@@ -37,6 +37,12 @@ impl CipherFile {
 	fn encrypt(&mut self, key: &String) {
 		let mut enc: Vec<u8> = Vec::new();
 		let key_chars: Vec<char> = key.chars().collect();
+		
+		let mut suffix: String = String::from("<RCRMETA-FORMAT: |");
+		suffix.push_str(&self.format.clone());
+		suffix.push_str("| >");
+		self.content.extend(suffix.into_bytes().iter().cloned());
+		
 		for i in 0..self.content.len() {
 			let key_c: u8 = key_chars[i % key_chars.len()] as u8;
 			let x: u32 = ((self.content[i] as u32) + key_c as u32) as u32;
@@ -45,6 +51,7 @@ impl CipherFile {
 			enc.push(enc_c);
 		}
 		
+		self.format = String::from("rcr");
 		self.content = enc;
 	}
 	
@@ -59,11 +66,50 @@ impl CipherFile {
 			dec.push(dec_c);
 		}
 		
+		//interpret format
+		let mut i = dec.len()-1;
+		let mut buffering = false;
+		let mut buf: Vec<u8> = Vec::new();
+		let mut format_built = false;
+		while i != 0 {
+			let ch = match dec.pop() {
+				Some(x) => x,
+				None => break,
+			};
+			if ch == ('>' as u8) {
+				buffering = true;
+			} else if buffering && ch == ('<' as u8) {
+				buffering = false;
+				format_built = true;
+			}
+			
+			buf.push(ch);
+			
+			if !buffering { 
+				break;
+			}
+			i -= 1;
+		}
+		
+		if format_built {
+			buf.reverse();
+			let meta: String = String::from_utf8(buf).expect("Cannot build string");
+			let f_ar: Vec<String> = meta.split("|").map(|s| s.to_string()).collect();
+			let f: String = f_ar.get(1).expect("Out of bounds").clone();
+			self.format = f;
+		} else {
+			self.format = String::from("");
+		}
+		
+		
 		self.content = dec;
 	}
 	
 	pub fn save_as(&self, name: &String) {
-		let path = Path::new(&name);
+		let mut n2 = name.clone();
+		n2.push_str(".");
+		n2.push_str(&self.format);
+		let path = Path::new(&n2);
 		let mut f = File::create(&path).expect("Unable to create file");
 		f.write_all(&self.content).expect("Unable to write data");
 	}
@@ -81,16 +127,16 @@ fn main() {
 		let mut cf = CipherFile::new(arg);
 		println!("CRYPT: {}, FORMAT: {}", cf.name, cf.format);
 		
-		cf.encrypt(&password);
-		let mut name1: String = cf.name.clone();
-		name1.push_str(".rcr");
-		cf.save_as(&name1);
+		if cf.format == "rcr" {
+			cf.decrypt(&password);
+			let mut name: String = String::from("temp/");
+			name.push_str(&cf.name.clone());
+			cf.save_as(&name);
+		} else {
+			cf.encrypt(&password);
+			let name: String = cf.name.clone();
+			cf.save_as(&name);
+		}
 		
-		cf.decrypt(&password);
-		let mut name2: String = "temp/".to_string();
-		name2.push_str(&cf.name.clone());
-		name2.push_str(".");
-		name2.push_str(&cf.format.clone());
-		cf.save_as(&name2);
 	}
 }
