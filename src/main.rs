@@ -113,6 +113,17 @@ impl CipherFile {
 		let mut f = File::create(&path).expect("Unable to create file");
 		f.write_all(&self.content).expect("Unable to write data");
 	}
+	
+	pub fn remove(&self) { 
+		let mut file_name = self.name.clone();
+		if self.format != "" {
+			file_name.push_str(".");
+			file_name.push_str(&self.format.clone());
+		}
+		
+		let path = Path::new(&file_name);
+		std::fs::remove_file(&path).expect("Could not remove");
+	}
 }
 
 
@@ -129,14 +140,17 @@ fn main() {
 		
 		if cf.format == "rcr" {
 			cf.decrypt(&password);
-			let mut name: String = String::from("temp/");
+			let mut name: String = String::from("");
 			name.push_str(&cf.name.clone());
 			cf.save_as(&name);
 		} else {
+			cf.remove();
 			cf.encrypt(&password);
 			let name: String = cf.name.clone();
 			cf.save_as(&name);
 		}
 		
 	}
+	println!("Do anything to finish");
+    io::stdin().read_line(&mut password).expect("Failed to read line");
 }
