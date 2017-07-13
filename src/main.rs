@@ -160,13 +160,14 @@ fn main() {
     let tmp_dir = TempDir::new("temp").expect("dir not created");
     
     let args: Vec<_> = env::args().collect();
-    
+    let mut were_encrypted = false;
     for i in 1..args.len() {
 		let arg = args.get(i).expect("Args out of index").clone();
 		let mut cf = CipherFile::new(arg);
 		println!("CRYPT: {}, FORMAT: {}", cf.name, cf.format);
 		
 		if cf.format == "rcr" {
+			were_encrypted = true;
 			cf.decrypt(&password);
 			let mut path = tmp_dir.path();
 			let mut name = i.to_string();
@@ -179,7 +180,7 @@ fn main() {
 			
 			cf.save_as(&final_path);
 		} else {
-			//cf.remove();
+			cf.remove();
 			cf.encrypt(&password);
 			let name: String = cf.name.clone();
 			cf.save();
@@ -187,7 +188,9 @@ fn main() {
 	}
 	
     println!("{}", tmp_dir.path().display());
-	open_folder(tmp_dir.path());
+    if were_encrypted {
+		open_folder(tmp_dir.path());
+	}
 	
 	println!("Do anything to finish");
     io::stdin().read_line(&mut password).expect("Failed to read line");
