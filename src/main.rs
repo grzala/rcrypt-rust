@@ -4,6 +4,10 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::io;
 use std::env;
+use std::process::Command;
+
+extern crate tempdir;
+use tempdir::TempDir;
 
 struct CipherFile {
 	content: Vec<u8>,
@@ -25,12 +29,14 @@ impl CipherFile {
 			Ok(_) => s,
 		};
 		
-		let mut f: Vec<String> = path_str.split(".").map(|s| s.to_string()).collect();
-		let ref f2 = f.pop().expect("name empty");
+		let os_stem = path.file_stem().expect("Cannot extract stem");
+		let str_stem = os_stem.to_str().expect("Cannot extract stem string");
+		let ext = path.extension().expect("Cannot get extension");
+		let str_ext = ext.to_str().expect("Cannot get extension string");
 		CipherFile {
 			content: s,
-			format: f2.clone(),
-			name: f.join("").clone(),
+			format: String::from(str_ext),
+			name: String::from(str_stem),
 		}
 	}
 	
@@ -105,11 +111,17 @@ impl CipherFile {
 		self.content = dec;
 	}
 	
-	pub fn save_as(&self, name: &String) {
-		let mut n2 = name.clone();
+	pub fn save(&self) {
+		let mut n2 = self.name.clone();
 		n2.push_str(".");
 		n2.push_str(&self.format);
-		let path = Path::new(&n2);
+		let path = Path::new(&n2);;
+		
+		let mut f = File::create(&path).expect("Unable to create file");
+		f.write_all(&self.content).expect("Unable to write data");
+	}
+	
+	pub fn save_as(&self, path: &Path) {
 		let mut f = File::create(&path).expect("Unable to create file");
 		f.write_all(&self.content).expect("Unable to write data");
 	}
@@ -126,13 +138,29 @@ impl CipherFile {
 	}
 }
 
+fn open_folder(path: &Path) {
+    let dir_str = path.to_str().expect("Cannot convert");
+    println!("{}", dir_str);
+    
+    //if cfg!(target_os = "windows") {
+		Command::new("explorer")
+			.args(&[dir_str])
+			.spawn()
+			.expect("Failed to open folder");
+	//} else {
+	//}
+}
+
 
 fn main() {
 	println!("Type password: ");
     let mut password = String::new();
     io::stdin().read_line(&mut password).expect("Failed to read line");
+        
+    let tmp_dir = TempDir::new("temp").expect("dir not created");
     
     let args: Vec<_> = env::args().collect();
+    
     for i in 1..args.len() {
 		let arg = args.get(i).expect("Args out of index").clone();
 		let mut cf = CipherFile::new(arg);
@@ -140,17 +168,29 @@ fn main() {
 		
 		if cf.format == "rcr" {
 			cf.decrypt(&password);
-			let mut name: String = String::from("");
-			name.push_str(&cf.name.clone());
-			cf.save_as(&name);
+			let mut path = tmp_dir.path();
+			let mut name = i.to_string();
+			name.push_str(".");
+			name.push_str(&cf.format);
+			let path_name = Path::new(&name);
+			let path_buf: std::path::PathBuf = path.join(&path_name);
+			let final_path = &path_buf.as_path();
+			println!("saving as {}", final_path.display());
+			
+			cf.save_as(&final_path);
 		} else {
-			cf.remove();
+			//cf.remove();
 			cf.encrypt(&password);
 			let name: String = cf.name.clone();
-			cf.save_as(&name);
+			cf.save();
 		}
-		
 	}
+	
+    println!("{}", tmp_dir.path().display());
+	open_folder(tmp_dir.path());
+	
 	println!("Do anything to finish");
     io::stdin().read_line(&mut password).expect("Failed to read line");
+    
+    tmp_dir.close().expect("Cannot be closed");
 }
